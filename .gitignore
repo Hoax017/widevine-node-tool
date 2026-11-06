@@ -1,0 +1,28 @@
+# Dépendances
+node_modules/
+
+# Identifiants de device Widevine (clés privées) : ne jamais versionner
+*.wvd
+*.pem
+*.key
+client_id.bin
+*client_id*.bin
+private_key*
+
+# Extension tierce embarquée (contient son propre device.wvd)
+/Widevine L3 Decrypter/
+
+# Sorties / clés extraites
+*.keys
+keys.txt
+*.log
+
+# Environnement local
+.env
+.env.*
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

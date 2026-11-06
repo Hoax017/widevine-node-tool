@@ -1,0 +1,103 @@
+syntax = "proto2";
+package license_protocol;
+
+// Trimmed subset of Google's Widevine license_protocol.proto — only the
+// fields this tool actually reads/writes. Field numbers and enum values are
+// copied verbatim from pywidevine (devine-dl/pywidevine, GPL-3.0) so the
+// wire format matches exactly.
+
+enum LicenseType {
+  STREAMING = 1;
+  OFFLINE = 2;
+  AUTOMATIC = 3;
+}
+
+enum ProtocolVersion {
+  VERSION_2_0 = 20;
+  VERSION_2_1 = 21;
+  VERSION_2_2 = 22;
+}
+
+message LicenseIdentification {
+  optional bytes request_id = 1;
+  optional bytes session_id = 2;
+  optional bytes purchase_id = 3;
+  optional LicenseType type = 4;
+  optional int32 version = 5;
+  optional bytes provider_session_token = 6;
+}
+
+message LicenseRequest {
+  message ContentIdentification {
+    message WidevinePsshData {
+      repeated bytes pssh_data = 1;
+      optional LicenseType license_type = 2;
+      optional bytes request_id = 3;
+    }
+
+    optional WidevinePsshData widevine_pssh_data = 1;
+  }
+
+  enum RequestType {
+    NEW = 1;
+    RENEWAL = 2;
+    RELEASE = 3;
+  }
+
+  // NOTE: real field type is `ClientIdentification`, but message and bytes
+  // both use protobuf wire type 2 (length-delimited), so we pass the already
+  // serialized ClientIdentification blob straight through as bytes.
+  optional bytes client_id = 1;
+  optional ContentIdentification content_id = 2;
+  optional RequestType type = 3;
+  optional int64 request_time = 4;
+  optional bytes key_control_nonce_deprecated = 5;
+  optional ProtocolVersion protocol_version = 6 [default = VERSION_2_0];
+  optional uint32 key_control_nonce = 7;
+  optional bytes encrypted_client_id = 8;
+}
+
+message SignedMessage {
+  enum MessageType {
+    LICENSE_REQUEST = 1;
+    LICENSE = 2;
+    ERROR_RESPONSE = 3;
+    SERVICE_CERTIFICATE_REQUEST = 4;
+    SERVICE_CERTIFICATE = 5;
+    SUB_LICENSE = 6;
+    CAS_LICENSE_REQUEST = 7;
+    CAS_LICENSE = 8;
+    EXTERNAL_LICENSE_REQUEST = 9;
+    EXTERNAL_LICENSE = 10;
+  }
+
+  optional MessageType type = 1;
+  optional bytes msg = 2;
+  optional bytes signature = 3;
+  optional bytes session_key = 4;
+  optional bytes remote_attestation = 5;
+  // field 6 (metric_data) and 7 (service_version_info) intentionally omitted
+  optional uint32 session_key_type = 8;
+  optional bytes oemcrypto_core_message = 9;
+}
+
+message License {
+  message KeyContainer {
+    enum KeyType {
+      SIGNING = 1;
+      CONTENT = 2;
+      KEY_CONTROL = 3;
+      OPERATOR_SESSION = 4;
+      ENTITLEMENT = 5;
+      OEM_CONTENT = 6;
+    }
+
+    optional bytes id = 1;
+    optional bytes iv = 2;
+    optional bytes key = 3;
+    optional KeyType type = 4;
+  }
+
+  optional LicenseIdentification id = 1;
+  repeated KeyContainer key = 3;
+}

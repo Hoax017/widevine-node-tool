@@ -1,0 +1,10 @@
+{
+  "name": "widevine-node-tool",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node.js reimplementation of the Widevine license request/response flow (kid:key extraction) for cross-checking our own license server integration.",
+  "main": "cli.js",
+  "dependencies": {
+    "protobufjs": "^7.2.5"
+  }
+}
