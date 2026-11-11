@@ -74,6 +74,37 @@ Sortie sur stdout, une ligne par clé de type `CONTENT` :
 C'est exactement ce qu'il faut differ contre la sortie de l'extension pour
 la même vidéo/session.
 
+## Cache
+
+Les clés obtenues sont enregistrées dans un fichier JSON (par défaut
+`./widevine-cache.json`). Si le CLI est relancé avec les mêmes paramètres,
+les clés sont relues depuis le cache : pas de chargement du device, pas de
+requête au serveur de licence. stderr affiche alors `(from cache …)` ; la
+sortie stdout `kid:key` reste identique.
+
+La clé de cache est un SHA-256 de :
+
+- l'init data du PSSH (après extraction de la box) ;
+- l'URL du serveur de licence, **sans** query string ni fragment ;
+- le type de licence (`--license-type`).
+
+Les headers (tokens d'auth qui expirent) et le device ne sont pas pris en
+compte. Seules les réponses contenant au moins une clé `CONTENT` sont
+mises en cache.
+
+| Option | Effet |
+| --- | --- |
+| `--cache <fichier>` | Fichier de cache à utiliser (défaut `widevine-cache.json`) |
+| `--refresh` | Ignore l'entrée existante, refait la requête et écrase l'entrée |
+| `--no-cache` | Désactive complètement le cache (ni lecture ni écriture) |
+
+Utiliser `--refresh` ou `--no-cache` quand la réponse peut changer pour un
+même PSSH : rotation de clés (live), ou changement de device / token donnant
+accès à un autre sous-ensemble de clés (ex. SD seulement en L3).
+
+Le fichier de cache contient des clés en clair : il est exclu par
+`.gitignore`, ne pas le versionner.
+
 ## Comment ça marche
 
 1. **PSSH** (`pssh.js`) — le PSSH que tu récupères (log `[PSSH]` de

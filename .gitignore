@@ -15,6 +15,8 @@ private_key*
 # Sorties / clés extraites
 *.keys
 keys.txt
+widevine-cache.json
+*.tmp
 *.log
 
 # Environnement local

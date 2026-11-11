@@ -12,6 +12,13 @@
 //     --url https://license.example.com/widevine \
 //     [--header "Authorization: Bearer xxx"] [--header "X-Custom: y"] \
 //     [--license-type STREAMING|OFFLINE|AUTOMATIC]
+//     [--cache widevine-cache.json] [--refresh] [--no-cache]
+//
+// Results are cached in a JSON file (default ./widevine-cache.json), keyed on
+// PSSH init data + license URL (without query string) + license type. A cache
+// hit prints the stored keys without contacting the license server.
+// --refresh forces a new request and overwrites the entry; --no-cache
+// disables both reading and writing.
 //
 // Device credentials can also be passed as separate provisioned files:
 //   --client-id client_id.bin --private-key private_key.pem
@@ -20,6 +27,7 @@ const { Cdm } = require('./widevine');
 const device = require('./device');
 const { toInitData } = require('./pssh');
 const debug = require('./debug');
+const cache = require('./cache');
 
 function isProbablyText(buffer) {
   const sample = buffer.subarray(0, Math.min(buffer.length, 64));
@@ -179,6 +187,10 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === '--debug') {
       args.debug = true;
+    } else if (a === '--no-cache') {
+      args.noCache = true;
+    } else if (a === '--refresh') {
+      args.refresh = true;
     } else if (a === '--header') {
       args.headers.push(argv[++i]);
     } else if (a.startsWith('--')) {
@@ -203,6 +215,29 @@ async function main() {
     process.exit(1);
   }
 
+  const initData = toInitData(args.pssh);
+  debug.log('PSSH init data: %d bytes, hex=%s', initData.length, Buffer.from(initData).toString('hex'));
+
+  const licenseType = args['license-type'] || 'STREAMING';
+
+  const useCache = !args.noCache;
+  const cacheFile = args.cache || cache.DEFAULT_CACHE_FILE;
+  const cacheKey = cache.computeCacheKey({ initData, url: args.url, licenseType });
+  debug.log('cache: %s file=%s key=%s', useCache ? 'enabled' : 'disabled', cacheFile, cacheKey);
+
+  if (useCache && !args.refresh) {
+    const hit = cache.getEntry(cacheFile, cacheKey);
+    if (hit) {
+      debug.log('cache hit (stored %s)', hit.createdAt);
+      for (const k of hit.keys) {
+        console.log(`${k.kid}:${k.key}`);
+      }
+      console.error(`(from cache ${cacheFile}, stored ${hit.createdAt}; use --refresh to re-request)`);
+      return;
+    }
+    debug.log('cache miss');
+  }
+
   debug.log('loading device credentials...');
   const dev = args.wvd
     ? device.loadFromWvd(args.wvd)
@@ -214,10 +249,6 @@ async function main() {
   const sessionId = await cdm.open();
   debug.log('CDM session opened: %s', sessionId.toString('hex'));
 
-  const initData = toInitData(args.pssh);
-  debug.log('PSSH init data: %d bytes, hex=%s', initData.length, Buffer.from(initData).toString('hex'));
-
-  const licenseType = args['license-type'] || 'STREAMING';
   debug.log('requesting license challenge (type=%s)...', licenseType);
   const { challenge, requestId } = await cdm.getLicenseChallenge(
     sessionId,
@@ -278,13 +309,31 @@ async function main() {
     debug.log('  key type=%s kid=%s key=%s', k.type, k.kid, k.key);
   }
 
-  for (const k of keys) {
-    if (k.type === 'CONTENT') {
-      console.log(`${k.kid}:${k.key}`);
-    }
+  const contentKeys = keys
+    .filter((k) => k.type === 'CONTENT')
+    .map((k) => ({ kid: k.kid, key: k.key }));
+
+  for (const k of contentKeys) {
+    console.log(`${k.kid}:${k.key}`);
   }
 
   console.error(`(license server signature valid: ${signatureOk})`);
+
+  if (useCache && contentKeys.length) {
+    try {
+      cache.setEntry(cacheFile, cacheKey, {
+        createdAt: new Date().toISOString(),
+        url: cache.normalizeUrl(args.url),
+        licenseType,
+        pssh: args.pssh,
+        signatureOk,
+        keys: contentKeys,
+      });
+      debug.log('cache: stored %d key(s) in %s', contentKeys.length, cacheFile);
+    } catch (err) {
+      console.error(`(warning: cannot write cache ${cacheFile}: ${err.message})`);
+    }
+  }
 }
 
 if (require.main === module) {
